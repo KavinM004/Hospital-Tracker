@@ -1,64 +1,80 @@
-import nodemailer from "nodemailer";
+export async function sendPasswordResetEmail(to, resetUrl) {
+  const apiKey = process.env.BREVO_API_KEY;
+  const senderEmail = process.env.MAIL_FROM;
+  const senderName = process.env.MAIL_FROM_NAME || "MediCare Hospital";
 
-let transporter;
+  // Validate required environment variables
+  const required = {
+    BREVO_API_KEY: apiKey,
+    MAIL_FROM: senderEmail,
+  };
 
-function getTransporter() {
-  if (transporter) return transporter;
-
-  const required = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "MAIL_FROM"];
-
-  const missing = required.filter((key) => !process.env[key]?.trim());
+  const missing = Object.entries(required)
+    .filter(([, value]) => !value?.trim())
+    .map(([key]) => key);
 
   if (missing.length) {
     throw new Error(`Missing email configuration: ${missing.join(", ")}`);
   }
 
-  const port = Number(process.env.SMTP_PORT || 587);
-
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port,
-    secure: port === 465,
-    requireTLS: port === 587,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+  // Send email through Brevo's HTTPS API
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "api-key": apiKey,
+      "content-type": "application/json",
     },
-  });
+    signal: AbortSignal.timeout(10000),
+    body: JSON.stringify({
+      sender: {
+        name: senderName,
+        email: senderEmail,
+      },
+      to: [{ email: to }],
+      subject: "Reset your MediCare Hospital password",
 
-  return transporter;
-}
-
-export async function sendPasswordResetEmail(to, resetUrl) {
-  const mailer = getTransporter();
-
-  await mailer.sendMail({
-    from: process.env.MAIL_FROM,
-    to,
-    subject: "Reset your MediCare Hospital password",
-
-    text: `Reset your MediCare Hospital password using this link:
+      textContent: `Reset your MediCare Hospital password using this link:
 
 ${resetUrl}
 
 This link expires in 15 minutes and can only be used once.
-If you did not request this, ignore this email.`,
+If you did not request this email, ignore it.`,
 
-    html: `
-      <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">
-        <h2>MediCare Hospital</h2>
-        <h3>Reset your password</h3>
-        <p>Use the button below to choose a new password.</p>
-        <p>
-          <a href="${resetUrl}"
-             style="background:#2563eb;color:white;padding:12px 18px;
-                    border-radius:6px;text-decoration:none">
-            Reset Password
-          </a>
-        </p>
-        <p>This link expires in 15 minutes and can only be used once.</p>
-        <p>If you did not request this, ignore this email.</p>
-      </div>
-    `,
+      htmlContent: `
+          <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;line-height:1.6">
+            <h2>MediCare Hospital</h2>
+            <h3>Reset your password</h3>
+            <p>Use the button below to choose a new password.</p>
+            <p>
+              <a href="${resetUrl}"
+                 style="display:inline-block;background:#2563eb;color:#ffffff;padding:12px 18px;border-radius:6px;text-decoration:none">
+                Reset Password
+              </a>
+            </p>
+            <p>This link expires in 15 minutes and can only be used once.</p>
+            <p>If you did not request this email, ignore it.</p>
+          </div>
+        `,
+    }),
   });
+
+  // Handle Brevo API errors
+  if (!response.ok) {
+    const details = await response.text();
+
+    console.error(
+      "Brevo email API failed:",
+      response.status,
+      details.slice(0, 500),
+    );
+
+    throw new Error(`Brevo email API returned HTTP ${response.status}`);
+  }
+
+  const result = await response.json();
+
+  console.log("Password reset email accepted by Brevo.");
+
+  return result;
 }
