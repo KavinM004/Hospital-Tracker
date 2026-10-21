@@ -69,6 +69,7 @@ export default function Login() {
           <h2>Welcome back</h2>
           <p className="muted">Sign in to continue to your patient portal.</p>
 
+          {/* Google login */}
           <div className="google-area">
             <GoogleButton onError={setError} />
           </div>
@@ -112,6 +113,17 @@ export default function Login() {
               </div>
             </label>
 
+            {/* Forgot password link */}
+            <div className="flex justify-end -mt-2">
+              <Link
+                to="/forgot-password"
+                className="text-sm font-medium text-blue-600 hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
+
+            {/* Login error */}
             {error && (
               <div className="alert error" role="alert">
                 {error}

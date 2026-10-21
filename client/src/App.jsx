@@ -10,6 +10,8 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import AdmissionForm from "./pages/AdmissionForm";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 /* Always show patient login when opening the root URL */
 function Home() {
@@ -126,6 +128,11 @@ export default function App() {
         <Route path="/login" element={<PatientLoginRoute />} />
 
         <Route path="/signup" element={<PatientSignupRoute />} />
+
+        {/* Forgot and reset password */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Separate administrator authentication */}
         <Route path="/admin/login" element={<AdminLoginRoute />} />

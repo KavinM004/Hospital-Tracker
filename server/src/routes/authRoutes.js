@@ -4,6 +4,8 @@ import { OAuth2Client } from "google-auth-library";
 import User from "../models/User.js";
 import { createToken, publicUser } from "../utils/createToken.js";
 import { requireAuth } from "../middleware/auth.js";
+import crypto from "node:crypto";
+import { sendPasswordResetEmail } from "../utils/mailer.js";
 
 const router = Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -90,6 +92,111 @@ router.post("/google", async (req, res, next) => {
     res.json({ token: createToken(user), user: publicUser(user) });
   } catch (err) {
     res.status(401).json({ message: "Google sign-in failed. Please try again." });
+  }
+});
+
+router.post("/forgot-password", async (req, res, next) => {
+  let user;
+
+  try {
+    const email = req.body.email?.toLowerCase().trim();
+
+    if (!email) {
+      return res.status(400).json({
+        message: "Please enter your email address.",
+      });
+    }
+
+    user = await User.findOne({ email });
+
+    // Return the same message whether the account exists or not.
+    const message =
+      "If an account exists with that email, a password reset link will be sent.";
+
+    if (!user) {
+      return res.json({ message });
+    }
+
+    const token = crypto.randomBytes(32).toString("hex");
+
+    user.passwordResetTokenHash = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
+    user.passwordResetExpires = new Date(Date.now() + 15 * 60 * 1000);
+
+    await user.save();
+
+    const clientUrl = process.env.CLIENT_URL;
+
+    if (!clientUrl) {
+      throw new Error("CLIENT_URL is not configured.");
+    }
+
+    const resetUrl = `${clientUrl.replace(/\/+$/, "")}/reset-password?token=${token}`;
+
+    try {
+      await sendPasswordResetEmail(user.email, resetUrl);
+    } catch (emailError) {
+      user.passwordResetTokenHash = undefined;
+      user.passwordResetExpires = undefined;
+      await user.save();
+
+      console.error("Password reset email failed:", emailError.message);
+    }
+
+    return res.json({ message });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/reset-password", async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!/^[a-f0-9]{64}$/i.test(token || "")) {
+      return res.status(400).json({
+        message: "Invalid or expired password reset link.",
+      });
+    }
+
+    if (
+      typeof password !== "string" ||
+      password.length < 8 ||
+      password.length > 128
+    ) {
+      return res.status(400).json({
+        message: "Password must be between 8 and 128 characters.",
+      });
+    }
+
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const user = await User.findOne({
+      passwordResetTokenHash: tokenHash,
+      passwordResetExpires: { $gt: new Date() },
+    }).select("+passwordResetTokenHash +passwordResetExpires +passwordHash");
+
+    if (!user) {
+      return res.status(400).json({
+        message: "Invalid or expired password reset link.",
+      });
+    }
+
+    user.passwordHash = await bcrypt.hash(password, 12);
+    user.passwordResetTokenHash = undefined;
+    user.passwordResetExpires = undefined;
+
+    await user.save();
+
+    return res.json({
+      message:
+        "Password reset successful. Please log in with your new password.",
+    });
+  } catch (err) {
+    next(err);
   }
 });
 
