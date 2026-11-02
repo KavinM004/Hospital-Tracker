@@ -10,6 +10,7 @@ import doctorRoutes from "./routes/doctorRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import admissionRoutes from "./routes/admissionRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
+import familyRoutes from "./routes/familyRoutes.js";
 
 const app = express();
 
@@ -34,6 +35,7 @@ app.use("/api/doctors", doctorRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/admissions", admissionRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/family", familyRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

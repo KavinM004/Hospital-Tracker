@@ -1,6 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import Admission from "../models/Admission.js";
+import FamilyMember from "../models/FamilyMember.js";
 import Doctor from "../models/Doctor.js";
 import { requireAuth } from "../middleware/auth.js";
 const router = Router();
@@ -12,44 +13,205 @@ function localDateKey(date = new Date()) {
 
 router.post("/", requireAuth, async (req, res, next) => {
   const session = await mongoose.startSession();
+
   try {
-    const { doctorId, patientName, patientAge, gender, phone, reason, appointmentDate } = req.body;
-    if (!doctorId || !patientName?.trim() || patientAge === "" || !gender || !phone?.trim() || !reason?.trim() || !appointmentDate) {
-      return res.status(400).json({ message: "Please complete all required fields." });
+    const {
+      doctorId,
+      patientType,
+      familyMemberId,
+      patientName,
+      patientAge,
+      gender,
+      phone,
+      reason,
+      appointmentDate,
+    } = req.body;
+
+    if (
+      !doctorId ||
+      !reason?.trim() ||
+      !appointmentDate
+    ) {
+      return res.status(400).json({
+        message: "Please complete all required fields.",
+      });
     }
-    if (!mongoose.isValidObjectId(doctorId)) return res.status(400).json({ message: "Please select a valid doctor." });
-    const age = Number(patientAge);
-    if (!Number.isInteger(age) || age < 0 || age > 120) return res.status(400).json({ message: "Enter a valid patient age." });
-    const doctor = await Doctor.findOne({ _id: doctorId, active: true });
-    if (!doctor) return res.status(404).json({ message: "Selected doctor is unavailable." });
+
+    if (!mongoose.isValidObjectId(doctorId)) {
+      return res.status(400).json({
+        message: "Please select a valid doctor.",
+      });
+    }
+
+    let finalPatientName;
+    let finalPatientAge;
+    let finalGender;
+    let finalPhone;
+    let selectedFamilyMember = null;
+
+    // Booking for a saved family member
+    if (patientType === "family") {
+      if (!familyMemberId || !mongoose.isValidObjectId(familyMemberId)) {
+        return res.status(400).json({
+          message: "Please select a valid family member.",
+        });
+      }
+
+      selectedFamilyMember = await FamilyMember.findOne({
+        _id: familyMemberId,
+        user: req.user._id,
+      });
+
+      if (!selectedFamilyMember) {
+        return res.status(404).json({
+          message: "Family member not found in your account.",
+        });
+      }
+
+      finalPatientName = selectedFamilyMember.name;
+      finalGender = selectedFamilyMember.gender;
+      finalPhone = selectedFamilyMember.phone || phone?.trim();
+
+      const birthDate = new Date(selectedFamilyMember.dateOfBirth);
+      const today = new Date();
+
+      let age = today.getFullYear() - birthDate.getFullYear();
+
+      const birthdayNotReached =
+        today.getMonth() < birthDate.getMonth() ||
+        (today.getMonth() === birthDate.getMonth() &&
+          today.getDate() < birthDate.getDate());
+
+      if (birthdayNotReached) {
+        age--;
+      }
+
+      finalPatientAge = age;
+    } else {
+      // Booking for the logged-in user
+      finalPatientName = patientName?.trim();
+      finalGender = gender;
+      finalPhone = phone?.trim();
+
+      if (
+        !finalPatientName ||
+        patientAge === "" ||
+        patientAge === undefined ||
+        !finalGender ||
+        !finalPhone
+      ) {
+        return res.status(400).json({
+          message: "Please complete all required patient details.",
+        });
+      }
+
+      finalPatientAge = Number(patientAge);
+
+      if (
+        !Number.isInteger(finalPatientAge) ||
+        finalPatientAge < 0 ||
+        finalPatientAge > 120
+      ) {
+        return res.status(400).json({
+          message: "Enter a valid patient age.",
+        });
+      }
+    }
+
+    if (
+      !finalPatientName ||
+      !finalGender ||
+      !finalPhone?.trim() ||
+      !Number.isInteger(finalPatientAge) ||
+      finalPatientAge < 0 ||
+      finalPatientAge > 120
+    ) {
+      return res.status(400).json({
+        message: "Valid patient name, age, gender and phone are required.",
+      });
+    }
+
+    const doctor = await Doctor.findOne({
+      _id: doctorId,
+      active: true,
+    });
+
+    if (!doctor) {
+      return res.status(404).json({
+        message: "Selected doctor is unavailable.",
+      });
+    }
+
     const appointment = new Date(appointmentDate);
-    if (Number.isNaN(appointment.getTime()) || appointment < new Date(new Date().setHours(0,0,0,0))) {
-      return res.status(400).json({ message: "Choose a valid current or future appointment date." });
+
+    if (
+      Number.isNaN(appointment.getTime()) ||
+      appointment < new Date(new Date().setHours(0, 0, 0, 0))
+    ) {
+      return res.status(400).json({
+        message: "Choose a valid current or future appointment date.",
+      });
     }
+
     const todayKey = localDateKey();
     let admission;
+
     await session.withTransaction(async () => {
-      const last = await Admission.findOne({ tokenDate: todayKey }).sort({ tokenNumber: -1 }).session(session);
+      const last = await Admission.findOne({
+        tokenDate: todayKey,
+      })
+        .sort({ tokenNumber: -1 })
+        .session(session);
+
       admission = new Admission({
-        patient: req.user._id, doctor: doctor._id, patientName: patientName.trim(), patientAge: age, gender,
-        phone: phone.trim(), reason: reason.trim(), appointmentDate: appointment, tokenDate: todayKey,
-        tokenNumber: (last?.tokenNumber || 0) + 1, fee: doctor.fee, paymentStatus: process.env.RAZORPAY_KEY_ID ? "PENDING" : "PENDING"
+        patient: req.user._id,
+        familyMember: selectedFamilyMember?._id || null,
+        doctor: doctor._id,
+        patientName: finalPatientName,
+        patientAge: finalPatientAge,
+        gender: finalGender,
+        phone: finalPhone,
+        reason: reason.trim(),
+        appointmentDate: appointment,
+        tokenDate: todayKey,
+        tokenNumber: (last?.tokenNumber || 0) + 1,
+        fee: doctor.fee,
+        paymentStatus: "PENDING",
       });
+
       await admission.save({ session });
     });
+
     await admission.populate("doctor", "name specialty qualification fee");
+
     res.status(201).json({ admission });
   } catch (err) {
-    if (err.code === 11000) return res.status(409).json({ message: "Token allocation conflict. Please submit again." });
+    if (err.code === 11000) {
+      return res.status(409).json({
+        message: "Token allocation conflict. Please submit again.",
+      });
+    }
+
     next(err);
-  } finally { await session.endSession(); }
+  } finally {
+    await session.endSession();
+  }
 });
 
 router.get("/mine", requireAuth, async (req, res, next) => {
   try {
-    const admissions = await Admission.find({ patient: req.user._id }).populate("doctor", "name specialty").sort({ createdAt: -1 }).limit(50);
+    const admissions = await Admission.find({
+      patient: req.user._id,
+    })
+      .populate("doctor", "name specialty")
+      .populate("familyMember", "name relationship")
+      .sort({ createdAt: -1 })
+      .limit(50);
+
     res.json({ admissions });
-  } catch (err) { next(err); }
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.get("/:id/token.pdf", requireAuth, async (req, res, next) => {

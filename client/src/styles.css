@@ -2320,3 +2320,263 @@ input:focus-visible {
   color: #16a6a1;
   text-decoration: underline;
 }
+
+/* Login method selector */
+.login-method-switch {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 5px;
+  margin: 18px 0 24px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-sizing: border-box;
+}
+
+.login-method-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  padding: 12px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.login-method-btn:hover {
+  color: #2563eb;
+}
+
+.login-method-btn.active {
+  background: #ffffff;
+  color: #2563eb;
+  border-color: #dbeafe;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.07);
+}
+
+.login-method-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.login-method-btn svg {
+  flex-shrink: 0;
+}
+
+@media (max-width: 400px) {
+  .login-method-btn {
+    gap: 6px;
+    padding: 11px 6px;
+    font-size: 13px;
+  }
+}
+
+/* Admission form improvements */
+
+.admission-fields {
+  min-width: 0;
+}
+
+.admission-fields .section-title {
+  margin-bottom: 24px;
+}
+
+.admission-fields .section-title.second {
+  margin-top: 32px;
+}
+
+.admission-fields .field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 22px;
+  margin-bottom: 24px;
+}
+
+.admission-fields .field-grid > label {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+  color: #183153;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.admission-fields .field-grid > .span-2 {
+  grid-column: 1 / -1;
+}
+
+.admission-fields input,
+.admission-fields select,
+.admission-fields textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 13px 15px;
+  border: 1px solid #dce5f2;
+  border-radius: 10px;
+  background: #fff;
+  color: #183153;
+  font: inherit;
+  font-size: 14px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.admission-fields input,
+.admission-fields select {
+  min-height: 48px;
+}
+
+.admission-fields textarea {
+  display: block;
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.admission-fields input:focus,
+.admission-fields select:focus,
+.admission-fields textarea:focus {
+  outline: none;
+  border-color: #2ad2b2;
+  box-shadow: 0 0 0 3px rgba(42, 210, 178, 0.14);
+}
+
+.admission-fields input[readonly] {
+  background: #f6f9fc;
+  color: #536780;
+  cursor: default;
+}
+
+/* Family member section */
+
+.family-selection {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+  margin: 20px 0 28px;
+}
+
+.family-selection > label {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  color: #183153;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.family-selection > .btn {
+  align-self: flex-start;
+}
+
+.family-add-panel {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 22px;
+  border: 1px solid #dce8f2;
+  border-radius: 14px;
+  background: #f8fbff;
+}
+
+.family-add-panel h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 22px;
+  color: #183153;
+  font-size: 17px;
+}
+
+.family-add-panel .field-grid {
+  margin-bottom: 20px;
+}
+
+.family-add-panel .btn {
+  margin-top: 4px;
+}
+
+.family-selection .secure-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #16834a;
+  font-size: 13px;
+}
+
+/* Improve spacing before the doctor list */
+
+.admission-fields .doctor-grid {
+  margin-top: 22px;
+  margin-bottom: 26px;
+}
+
+.admission-fields .date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 24px;
+  color: #183153;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.admission-fields .date-field .input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid #dce5f2;
+  border-radius: 10px;
+  background: #fff;
+  color: #71839d;
+}
+
+.admission-fields .date-field .input-wrap input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 12px 0;
+  border: none;
+  box-shadow: none;
+}
+
+/* Responsive layout */
+
+@media (max-width: 640px) {
+  .admission-fields .field-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+
+  .admission-fields .field-grid > .span-2 {
+    grid-column: auto;
+  }
+
+  .family-add-panel {
+    padding: 16px;
+  }
+
+  .admission-fields .section-title.second {
+    margin-top: 26px;
+  }
+}

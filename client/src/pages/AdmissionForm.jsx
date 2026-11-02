@@ -10,6 +10,8 @@ import {
   UserRound,
   AlertCircle,
   Stethoscope,
+  Users,
+  UserPlus,
 } from "lucide-react";
 
 import api from "../api";
@@ -45,12 +47,21 @@ export default function AdmissionForm() {
   const { user, logout } = useAuth();
 
   const [doctors, setDoctors] = useState([]);
+  const [familyMembers, setFamilyMembers] = useState([]);
+
   const [loadingDoctors, setLoadingDoctors] = useState(true);
+  const [loadingFamily, setLoadingFamily] = useState(false);
   const [busy, setBusy] = useState(false);
   const [paying, setPaying] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [savingFamily, setSavingFamily] = useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(null);
+  const [showFamilyForm, setShowFamilyForm] = useState(false);
+
+  const [patientType, setPatientType] = useState("self");
+  const [familyMemberId, setFamilyMemberId] = useState("");
 
   const [form, setForm] = useState({
     doctorId: "",
@@ -62,9 +73,22 @@ export default function AdmissionForm() {
     appointmentDate: "",
   });
 
+  const [familyForm, setFamilyForm] = useState({
+    name: "",
+    relationship: "",
+    dateOfBirth: "",
+    gender: "",
+    phone: "",
+  });
+
   const selectedDoctor = useMemo(
     () => doctors.find((doctor) => doctor._id === form.doctorId),
     [doctors, form.doctorId],
+  );
+
+  const selectedFamilyMember = useMemo(
+    () => familyMembers.find((member) => member._id === familyMemberId),
+    [familyMembers, familyMemberId],
   );
 
   async function loadDoctors() {
@@ -99,14 +123,61 @@ export default function AdmissionForm() {
     }
   }
 
+  async function loadFamilyMembers() {
+    if (!user) return;
+
+    setLoadingFamily(true);
+
+    try {
+      const { data } = await api.get("/family");
+
+      const list = Array.isArray(data?.familyMembers)
+        ? data.familyMembers
+        : Array.isArray(data)
+          ? data
+          : [];
+
+      setFamilyMembers(list);
+    } catch (err) {
+      if (err.response?.status === 401) {
+        await handleAuthFailure(err);
+        return;
+      }
+
+      setError(
+        getErrorMessage(
+          err,
+          "Unable to load family members. Please try again.",
+        ),
+      );
+    } finally {
+      setLoadingFamily(false);
+    }
+  }
+
   useEffect(() => {
     loadDoctors();
   }, []);
+
+  useEffect(() => {
+    loadFamilyMembers();
+  }, [user]);
 
   function change(event) {
     const { name, value } = event.target;
 
     setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+
+    if (error) setError("");
+  }
+
+  function changeFamilyForm(event) {
+    const { name, value } = event.target;
+
+    setFamilyForm((previous) => ({
       ...previous,
       [name]: value,
     }));
@@ -123,9 +194,62 @@ export default function AdmissionForm() {
     if (error) setError("");
   }
 
+  function changePatientType(event) {
+    const value = event.target.value;
+
+    setPatientType(value);
+    setFamilyMemberId("");
+    setError("");
+
+    if (value === "self") {
+      setForm((previous) => ({
+        ...previous,
+        patientName: user?.name || "",
+        patientAge: "",
+        gender: "",
+        phone: user?.phone || "",
+      }));
+    } else {
+      setForm((previous) => ({
+        ...previous,
+        patientName: "",
+        patientAge: "",
+        gender: "",
+        phone: "",
+      }));
+    }
+  }
+
+  function selectFamilyMember(event) {
+    const memberId = event.target.value;
+    const member = familyMembers.find((item) => item._id === memberId);
+
+    setFamilyMemberId(memberId);
+    setError("");
+
+    if (member) {
+      setForm((previous) => ({
+        ...previous,
+        patientName: member.name || "",
+        gender: member.gender || "",
+        phone: member.phone || "",
+        patientAge: "",
+      }));
+    } else {
+      setForm((previous) => ({
+        ...previous,
+        patientName: "",
+        patientAge: "",
+        gender: "",
+        phone: "",
+      }));
+    }
+  }
+
   async function handleAuthFailure(err) {
     if (err.response?.status === 401) {
       logout();
+
       navigate("/login", {
         replace: true,
         state: {
@@ -139,6 +263,91 @@ export default function AdmissionForm() {
     return false;
   }
 
+  async function addFamilyMember(event) {
+    event.preventDefault();
+    setError("");
+
+    if (!familyForm.name.trim()) {
+      setError("Please enter the family member's name.");
+      return;
+    }
+
+    if (!familyForm.relationship) {
+      setError("Please select the relationship.");
+      return;
+    }
+
+    if (!familyForm.dateOfBirth) {
+      setError("Please enter the date of birth.");
+      return;
+    }
+
+    if (familyForm.dateOfBirth > getTodayDate()) {
+      setError("Date of birth cannot be in the future.");
+      return;
+    }
+
+    if (!familyForm.gender) {
+      setError("Please select the gender.");
+      return;
+    }
+
+    setSavingFamily(true);
+
+    try {
+      const payload = {
+        name: familyForm.name.trim(),
+        relationship: familyForm.relationship,
+        dateOfBirth: familyForm.dateOfBirth,
+        gender: familyForm.gender,
+        phone: familyForm.phone.trim(),
+      };
+
+      const { data } = await api.post("/family", payload);
+
+      const newMember = data?.familyMember;
+
+      if (!newMember?._id) {
+        throw new Error("The server did not return the saved family member.");
+      }
+
+      setFamilyMembers((previous) => [...previous, newMember]);
+
+      setPatientType("family");
+      setFamilyMemberId(newMember._id);
+
+      setForm((previous) => ({
+        ...previous,
+        patientName: newMember.name || "",
+        gender: newMember.gender || "",
+        phone: newMember.phone || "",
+        patientAge: "",
+      }));
+
+      setFamilyForm({
+        name: "",
+        relationship: "",
+        dateOfBirth: "",
+        gender: "",
+        phone: "",
+      });
+
+      setShowFamilyForm(false);
+      setError("");
+    } catch (err) {
+      if (await handleAuthFailure(err)) return;
+
+      setError(
+        getErrorMessage(
+          err,
+          "Unable to save the family member. Please try again.",
+        ),
+      );
+    } finally {
+      setSavingFamily(false);
+    }
+  }
+
   async function downloadToken(admissionId) {
     setError("");
     setDownloading(true);
@@ -150,7 +359,6 @@ export default function AdmissionForm() {
         responseType: "blob",
       });
 
-      // Axios may receive a JSON error as a Blob.
       if (response.data.type && !response.data.type.includes("pdf")) {
         throw new Error("The server did not return a PDF file.");
       }
@@ -207,10 +415,47 @@ export default function AdmissionForm() {
       return;
     }
 
-    const age = Number(form.patientAge);
+    if (patientType === "family" && !familyMemberId) {
+      setError("Please select a family member before continuing.");
+      return;
+    }
 
-    if (!Number.isInteger(age) || age < 0 || age > 120) {
-      setError("Please enter a valid age between 0 and 120.");
+    if (patientType === "self") {
+      const age = Number(form.patientAge);
+
+      if (!Number.isInteger(age) || age < 0 || age > 120) {
+        setError("Please enter a valid age between 0 and 120.");
+        return;
+      }
+
+      if (!form.patientName.trim()) {
+        setError("Please enter the patient's name.");
+        return;
+      }
+
+      if (!form.gender) {
+        setError("Please select the patient's gender.");
+        return;
+      }
+
+      if (!form.phone.trim()) {
+        setError("Please enter the patient's mobile number.");
+        return;
+      }
+    } else {
+      if (!selectedFamilyMember) {
+        setError("Please select a valid saved family member.");
+        return;
+      }
+
+      if (!selectedFamilyMember.phone && !form.phone.trim()) {
+        setError("Please enter a contact number for the family member.");
+        return;
+      }
+    }
+
+    if (!form.reason.trim()) {
+      setError("Please enter the reason for the visit.");
       return;
     }
 
@@ -218,12 +463,21 @@ export default function AdmissionForm() {
 
     try {
       const payload = {
-        ...form,
-        patientName: form.patientName.trim(),
-        patientAge: age,
-        phone: form.phone.trim(),
+        doctorId: form.doctorId,
+        appointmentDate: form.appointmentDate,
         reason: form.reason.trim(),
+        patientType,
       };
+
+      if (patientType === "family") {
+        payload.familyMemberId = familyMemberId;
+        payload.phone = form.phone.trim();
+      } else {
+        payload.patientName = form.patientName.trim();
+        payload.patientAge = Number(form.patientAge);
+        payload.gender = form.gender;
+        payload.phone = form.phone.trim();
+      }
 
       const { data } = await api.post("/admissions", payload);
 
@@ -432,7 +686,9 @@ export default function AdmissionForm() {
         <div>
           <span className="eyebrow">PATIENT ADMISSION</span>
           <h1>Register for a visit</h1>
-          <p className="muted">Enter patient details and select a doctor.</p>
+          <p className="muted">
+            Book an appointment for yourself or a family member.
+          </p>
         </div>
       </div>
 
@@ -441,88 +697,311 @@ export default function AdmissionForm() {
           <div className="section-title">
             <span className="step-badge">01</span>
             <div>
-              <h2>Patient details</h2>
+              <h2>Who is this appointment for?</h2>
               <p className="muted">
-                Please provide accurate contact information.
+                Choose yourself or someone in your family.
               </p>
             </div>
           </div>
 
-          <div className="field-grid">
-            <label>
-              Patient full name
-              <input
-                name="patientName"
-                value={form.patientName}
-                onChange={change}
-                placeholder="Full name"
-                required
-                maxLength={100}
-                autoComplete="name"
-              />
-            </label>
+          <label>
+            Appointment for
+            <select value={patientType} onChange={changePatientType}>
+              <option value="self">Myself</option>
+              <option value="family">Family member</option>
+            </select>
+          </label>
 
-            <label>
-              Age
-              <input
-                name="patientAge"
-                type="number"
-                min="0"
-                max="120"
-                step="1"
-                value={form.patientAge}
-                onChange={change}
-                placeholder="Age in years"
-                required
-              />
-            </label>
+          {patientType === "family" && (
+            <div className="family-selection">
+              <label>
+                Select family member
+                <select
+                  value={familyMemberId}
+                  onChange={selectFamilyMember}
+                  required
+                >
+                  <option value="">Choose a family member</option>
 
-            <label>
-              Gender
-              <select
-                name="gender"
-                value={form.gender}
-                onChange={change}
-                required
+                  {familyMembers.map((member) => (
+                    <option key={member._id} value={member._id}>
+                      {member.name} ({member.relationship})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {loadingFamily && (
+                <p className="tiny muted">Loading family members...</p>
+              )}
+
+              {!loadingFamily && familyMembers.length === 0 && (
+                <p className="tiny muted">
+                  You have not added any family members yet.
+                </p>
+              )}
+
+              <button
+                type="button"
+                className="btn secondary small"
+                onClick={() => {
+                  setShowFamilyForm((previous) => !previous);
+                  setError("");
+                }}
               >
-                <option value="">Select gender</option>
-                <option value="Female">Female</option>
-                <option value="Male">Male</option>
-                <option value="Other">Other</option>
-                <option value="Prefer not to say">Prefer not to say</option>
-              </select>
-            </label>
+                <UserPlus size={16} />
+                {showFamilyForm ? "Cancel" : "Add family member"}
+              </button>
 
-            <label>
-              Mobile number
-              <input
-                name="phone"
-                type="tel"
-                value={form.phone}
-                onChange={change}
-                placeholder="Contact number"
-                required
-                maxLength={20}
-                autoComplete="tel"
-              />
-            </label>
+              {showFamilyForm && (
+                <div className="family-add-panel">
+                  <h3>
+                    <Users size={18} /> Add a family member
+                  </h3>
 
-            <label className="span-2">
-              Reason for visit
-              <textarea
-                name="reason"
-                value={form.reason}
-                onChange={change}
-                placeholder="Brief reason for consultation"
-                required
-                maxLength={500}
-                rows={3}
-              />
-            </label>
-          </div>
+                  <div className="field-grid">
+                    <label>
+                      Full name
+                      <input
+                        name="name"
+                        value={familyForm.name}
+                        onChange={changeFamilyForm}
+                        maxLength={100}
+                        autoComplete="off"
+                        required
+                      />
+                    </label>
+
+                    <label>
+                      Relationship
+                      <select
+                        name="relationship"
+                        value={familyForm.relationship}
+                        onChange={changeFamilyForm}
+                        required
+                      >
+                        <option value="">Select relationship</option>
+                        <option value="Spouse">Spouse</option>
+                        <option value="Son">Son</option>
+                        <option value="Daughter">Daughter</option>
+                        <option value="Father">Father</option>
+                        <option value="Mother">Mother</option>
+                        <option value="Brother">Brother</option>
+                        <option value="Sister">Sister</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </label>
+
+                    <label>
+                      Date of birth
+                      <input
+                        type="date"
+                        name="dateOfBirth"
+                        value={familyForm.dateOfBirth}
+                        onChange={changeFamilyForm}
+                        max={getTodayDate()}
+                        required
+                      />
+                    </label>
+
+                    <label>
+                      Gender
+                      <select
+                        name="gender"
+                        value={familyForm.gender}
+                        onChange={changeFamilyForm}
+                        required
+                      >
+                        <option value="">Select gender</option>
+                        <option value="Female">Female</option>
+                        <option value="Male">Male</option>
+                        <option value="Other">Other</option>
+                        <option value="Prefer not to say">
+                          Prefer not to say
+                        </option>
+                      </select>
+                    </label>
+
+                    <label className="span-2">
+                      Mobile number
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={familyForm.phone}
+                        onChange={changeFamilyForm}
+                        maxLength={20}
+                        placeholder="Contact number"
+                      />
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn primary full"
+                    onClick={(event) => {
+                      const formElement = event.currentTarget
+                        .closest(".family-add-panel")
+                        ?.querySelector("input, select");
+
+                      const panel =
+                        event.currentTarget.closest(".family-add-panel");
+
+                      if (!panel) return;
+
+                      const inputs = panel.querySelectorAll("input, select");
+
+                      for (const input of inputs) {
+                        if (!input.checkValidity()) {
+                          input.reportValidity();
+                          return;
+                        }
+                      }
+
+                      addFamilyMember({
+                        preventDefault: () => {},
+                      });
+                    }}
+                    disabled={savingFamily}
+                  >
+                    {savingFamily
+                      ? "Saving family member..."
+                      : "Save family member"}
+                  </button>
+                </div>
+              )}
+
+              {selectedFamilyMember && (
+                <div className="secure-note">
+                  <CheckCircle2 size={16} />
+                  Booking for {selectedFamilyMember.name}.
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="section-title second">
             <span className="step-badge">02</span>
+            <div>
+              <h2>Patient details</h2>
+              <p className="muted">
+                {patientType === "family"
+                  ? "Details are taken from the selected family member."
+                  : "Please provide accurate contact information."}
+              </p>
+            </div>
+          </div>
+
+          {patientType === "self" ? (
+            <div className="field-grid">
+              <label>
+                Patient full name
+                <input
+                  name="patientName"
+                  value={form.patientName}
+                  onChange={change}
+                  placeholder="Full name"
+                  required
+                  maxLength={100}
+                  autoComplete="name"
+                />
+              </label>
+
+              <label>
+                Age
+                <input
+                  name="patientAge"
+                  type="number"
+                  min="0"
+                  max="120"
+                  step="1"
+                  value={form.patientAge}
+                  onChange={change}
+                  placeholder="Age in years"
+                  required
+                />
+              </label>
+
+              <label>
+                Gender
+                <select
+                  name="gender"
+                  value={form.gender}
+                  onChange={change}
+                  required
+                >
+                  <option value="">Select gender</option>
+                  <option value="Female">Female</option>
+                  <option value="Male">Male</option>
+                  <option value="Other">Other</option>
+                  <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+              </label>
+
+              <label>
+                Mobile number
+                <input
+                  name="phone"
+                  type="tel"
+                  value={form.phone}
+                  onChange={change}
+                  placeholder="Contact number"
+                  required
+                  maxLength={20}
+                  autoComplete="tel"
+                />
+              </label>
+            </div>
+          ) : (
+            <div className="field-grid">
+              <label>
+                Patient full name
+                <input
+                  value={selectedFamilyMember?.name || ""}
+                  readOnly
+                  placeholder="Select a family member"
+                />
+              </label>
+
+              <label>
+                Gender
+                <input
+                  value={selectedFamilyMember?.gender || ""}
+                  readOnly
+                  placeholder="Gender"
+                />
+              </label>
+
+              <label className="span-2">
+                Contact number
+                <input
+                  name="phone"
+                  type="tel"
+                  value={form.phone}
+                  onChange={change}
+                  placeholder="Enter a contact number if none is saved"
+                  maxLength={20}
+                  required={!selectedFamilyMember?.phone}
+                />
+              </label>
+
+             < label className="span-2">
+            Reason for visit
+            <textarea
+              name="reason"
+              value={form.reason}
+              onChange={change}
+              placeholder="Brief reason for consultation"
+              required
+              maxLength={500}
+              rows={3}
+            />
+          </label>
+
+            </div>
+          )}
+
+          <div className="section-title second">
+            <span className="step-badge">03</span>
             <div>
               <h2>Doctor & appointment</h2>
               <p className="muted">
@@ -608,7 +1087,12 @@ export default function AdmissionForm() {
             type="submit"
             className="btn primary full"
             disabled={
-              busy || loadingDoctors || doctors.length === 0 || !form.doctorId
+              busy ||
+              loadingDoctors ||
+              doctors.length === 0 ||
+              !form.doctorId ||
+              loadingFamily ||
+              savingFamily
             }
           >
             {busy ? (
@@ -640,6 +1124,15 @@ export default function AdmissionForm() {
           <p className="muted">
             Review the consultation charge before continuing.
           </p>
+
+          <div className="fee-row">
+            <span>Patient</span>
+            <strong>
+              {patientType === "family"
+                ? selectedFamilyMember?.name || "Not selected"
+                : form.patientName || "Myself"}
+            </strong>
+          </div>
 
           <div className="fee-row">
             <span>Doctor</span>

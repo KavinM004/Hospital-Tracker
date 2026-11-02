@@ -11,6 +11,7 @@ import {
   Stethoscope,
   Ticket,
   Wallet,
+  UserRound,
 } from "lucide-react";
 
 import api from "../api";
@@ -49,6 +50,22 @@ function getTokenNumber(value) {
   }
 
   return String(value).padStart(3, "0");
+}
+
+function getRelationship(value) {
+  const relationships = {
+    Self: "Self",
+    Spouse: "Spouse",
+    Son: "Son",
+    Daughter: "Daughter",
+    Father: "Father",
+    Mother: "Mother",
+    Brother: "Brother",
+    Sister: "Sister",
+    Other: "Family member",
+  };
+
+  return relationships[value] || value || "Self";
 }
 
 function SummaryCard({ icon: Icon, label, value, description, color }) {
@@ -285,7 +302,10 @@ export default function Dashboard() {
           <div>
             <span className="patient-section-kicker">YOUR HEALTH RECORD</span>
             <h2>Your appointments</h2>
-            <p>View your doctor, appointment date, token and payment status.</p>
+            <p>
+              View each patient's name, relationship, doctor, token and payment
+              status.
+            </p>
           </div>
 
           <button
@@ -333,6 +353,20 @@ export default function Dashboard() {
                 admission.paymentStatus || "PENDING",
               ).toUpperCase();
 
+              // Identify the person receiving treatment.
+              const familyMember =
+                admission.familyMember &&
+                typeof admission.familyMember === "object"
+                  ? admission.familyMember
+                  : null;
+
+              const patientName =
+                familyMember?.name || admission.patientName || "Patient";
+
+              const relationship = familyMember
+                ? getRelationship(familyMember.relationship)
+                : "Self";
+
               return (
                 <article
                   className="patient-appointment-card"
@@ -343,6 +377,23 @@ export default function Dashboard() {
                   </div>
 
                   <div className="patient-appointment-info">
+                    {/* Patient identity */}
+                    <div className="patient-identity">
+                      <div className="patient-identity-icon">
+                        <UserRound size={18} />
+                      </div>
+
+                      <div className="patient-identity-details">
+                        <span className="patient-identity-label">PATIENT</span>
+
+                        <h3>{patientName}</h3>
+                      </div>
+
+                      <span className="patient-relationship-badge">
+                        {relationship}
+                      </span>
+                    </div>
+
                     <div className="patient-appointment-title">
                       <h3>{admission.doctor?.name || "Doctor"}</h3>
 

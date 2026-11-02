@@ -1,5 +1,4 @@
 import { createContext, useContext, useMemo, useState } from "react";
-
 import api from "../api";
 
 const AuthContext = createContext(null);
@@ -28,6 +27,25 @@ export function AuthProvider({ children }) {
 
   async function login(form) {
     const { data } = await api.post("/auth/login", form);
+    saveSession(data);
+    return data;
+  }
+
+  async function sendOtp(phone) {
+    const { data } = await api.post("/auth/send-otp", { phone });
+    return data;
+  }
+
+  async function verifyOtp(phone, code) {
+    const { data } = await api.post("/auth/verify-otp", {
+      phone,
+      code,
+    });
+
+    if (data.user?.role !== "PATIENT" || !data.token) {
+      throw new Error("Patient login failed.");
+    }
+
     saveSession(data);
     return data;
   }
@@ -63,6 +81,8 @@ export function AuthProvider({ children }) {
       user,
       register,
       login,
+      sendOtp,
+      verifyOtp,
       adminLogin,
       googleLogin,
       logout,
@@ -70,7 +90,11 @@ export function AuthProvider({ children }) {
     [user],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
